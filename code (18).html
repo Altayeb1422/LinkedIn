@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="zh-CN"> {/* Changed lang to Chinese */}
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中文句子处理与Anki生成</title> {/* Changed title */}
+    <!-- PDF.js library from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script>
+        // Set worker source for pdf.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js';
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"; /* Common system font stack */
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        textarea, input[type="file"], button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            box-sizing: border-box; /* Include padding in width */
+            font-size: 1em; /* Ensure consistent font size */
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #5cb85c;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #4cae4c;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #loadingIndicator, #statusBar {
+            text-align: center;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .hidden {
+            display: none;
+        }
+        .card-preview-area {
+            margin-top: 30px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            background-color: #f9f9f9;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .card-front, .card-back {
+            padding: 15px;
+        }
+        .card-front {
+            font-size: 1.3em; /* Slightly larger for prominence */
+            font-weight: bold;
+            background-color: #e9e9e9;
+            border-bottom: 1px solid #ddd;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            text-align: center; /* Center the main sentence */
+        }
+         .card-pinyin { /* Style for sentence pinyin */
+            font-size: 0.95em;
+            color: #666;
+            text-align: center;
+            margin-top: -10px; /* Adjust spacing */
+            padding-bottom: 10px;
+            background-color: #e9e9e9; /* Match front background */
+            border-bottom: 1px solid #ddd;
+        }
+        .card-back h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            color: #444; /* Slightly darker */
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 5px;
+        }
+        .card-back section { /* Add margin between sections */
+             margin-bottom: 15px;
+        }
+        .card-back ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .card-back li {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px dotted #eee;
+        }
+        .card-back li:last-child {
+            border-bottom: none;
+        }
+        .word-breakdown .word {
+            font-weight: bold;
+            font-size: 1.05em;
+        }
+        .word-breakdown .pinyin {
+            color: #777;
+            font-size: 0.9em;
+            margin-left: 5px;
+        }
+        .word-breakdown .definition {
+            display: block;
+            font-size: 0.95em;
+            margin-top: 3px;
+            color: #333;
+        }
+        .examples .example-sentence {
+            margin-bottom: 5px;
+        }
+        .examples .example-explanation {
+            font-size: 0.9em;
+            color: #555;
+            padding-left: 1em; /* Indent explanation */
+        }
+         .grammar p {
+            margin: 5px 0;
+        }
+        .grammar .pattern {
+            font-style: italic;
+            color: #666;
+            font-size: 0.95em;
+        }
+
+        .error {
+            color: #d9534f; /* Red for errors */
+        }
+        .success {
+            color: #5cb85c; /* Green for success */
+        }
+         .warning {
+             color: #f0ad4e; /* Orange for warnings */
+         }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>中文句子处理与Anki生成</h1> {/* Changed title */}
+
+        <!-- 1. User Input Handling -->
+        <section id="inputSection">
+            <h2>1. 输入</h2> {/* Changed heading */}
+            <label for="manualInput">输入或粘贴句子：</label> {/* Changed label */}
+            <textarea id="manualInput" placeholder="输入或粘贴句子... 例如：从而造成了80后子女的叛逆。"></textarea>
+
+            <label for="pdfInput">或上传PDF文件：</label> {/* Changed label */}
+            <input type="file" id="pdfInput" accept=".pdf">
+
+            <button id="processButton">处理输入</button> {/* Changed button text */}
+        </section>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="hidden">
+            <p>处理中... 请稍候。</p> {/* Changed text */}
+            <progress></progress>
+        </div>
+
+        <!-- Status Bar -->
+        <div id="statusBar"></div>
+
+        <!-- 5. Preview Generation -->
+        <section id="previewSection" class="hidden card-preview-area">
+            <h2>2. 预览卡片</h2> {/* Changed heading */}
+            <div id="cardContainer">
+                <!-- Preview cards will be dynamically inserted here -->
+            </div>
+            {/* Changed button text and style */}
+            <button id="addToAnkiButton" class="hidden" style="background-color: #f0ad4e;">添加到Anki (通过AnkiConnect)</button>
+        </section>
+    </div>
+
+    <!-- Card Template -->
+    <template id="cardTemplate">
+        <div class="card">
+            <div class="card-front">
+                <!-- Original Sentence -->
+            </div>
+            <div class="card-pinyin">
+                 <!-- Sentence Pinyin -->
+            </div>
+            <div class="card-back">
+                <section class="simple-explanation hidden">
+                     <h3>简单解释</h3> {/* Changed heading */}
+                     <p><!-- Whole sentence meaning --></p>
+                </section>
+                <section class="word-breakdown">
+                    <h3>词语解释</h3> {/* Changed heading */}
+                    <ul><!-- Word/Pinyin/Definition List --></ul>
+                </section>
+                <section class="examples hidden">
+                     <h3>例句</h3> {/* Changed heading */}
+                     <ul><!-- Example sentences --></ul>
+                </section>
+                <section class="grammar hidden">
+                    <h3>语法提示</h3> {/* Changed heading */}
+                    <!-- Grammar point -->
+                </section>
+            </div>
+        </div>
+    </template>
+
+    <script>
+        // --- Configuration ---
+        // WARNING: Exposing API keys in client-side code is insecure!
+        // This should only be run locally for personal use.
+        const DEEPSEEK_API_KEY = 'sk-860e351ec1cd42c2b185547f943fd46e'; // Replace with your actual key
+        const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'; // Adjust if needed
+        const ANKI_CONNECT_URL = 'http://localhost:8765'; // Default AnkiConnect URL
+        const ANKI_DECK_NAME = 'Mandarin Processed Sentences'; // Deck Name
+        const ANKI_MODEL_NAME = 'Basic'; // Ensure this model exists in your Anki
+
+        // --- DOM Elements ---
+        const manualInput = document.getElementById('manualInput');
+        const pdfInput = document.getElementById('pdfInput');
+        const processButton = document.getElementById('processButton');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const statusBar = document.getElementById('statusBar');
+        const previewSection = document.getElementById('previewSection');
+        const cardContainer = document.getElementById('cardContainer');
+        const addToAnkiButton = document.getElementById('addToAnkiButton');
+        const cardTemplate = document.getElementById('cardTemplate');
+
+        // --- State ---
+        let sentences = [];
+        let generatedCardData = []; // Stores data for AnkiConnect
+
+        // --- Event Listeners ---
+        processButton.addEventListener('click', handleProcessInput);
+        pdfInput.addEventListener('change', handlePdfFileSelect);
+        addToAnkiButton.addEventListener('click', handleAddToAnki);
+
+        // --- Functions ---
+
+        function setLoading(isLoading) {
+            if (isLoading) {
+                loadingIndicator.classList.remove('hidden');
+                processButton.disabled = true;
+                addToAnkiButton.disabled = true;
+            } else {
+                loadingIndicator.classList.add('hidden');
+                processButton.disabled = false;
+                // Re-enable Anki button only if there are cards
+                addToAnkiButton.disabled = generatedCardData.length === 0;
+            }
+        }
+
+        function updateStatus(message, type = 'info') { // type: 'info', 'success', 'warning', 'error'
+            statusBar.textContent = message;
+            statusBar.className = type; // Use class for styling
+            // Auto-clear info/success messages after some time
+            if (type === 'info' || type === 'success') {
+                setTimeout(() => {
+                     if (statusBar.textContent === message) {
+                        statusBar.textContent = '';
+                        statusBar.className = '';
+                     }
+                }, 5000);
+            }
+        }
+
+        function handlePdfFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                manualInput.value = ''; // Clear manual input if file is selected
+                updateStatus(`已选择PDF: ${file.name}`, 'info'); // Changed text
+            }
+        }
+
+        async function handleProcessInput() {
+            clearResults();
+            setLoading(true);
+            updateStatus('开始处理...', 'info'); // Changed text
+
+            const manualText = manualInput.value.trim();
+            const pdfFile = pdfInput.files[0];
+
+            let inputText = '';
+
+            try {
+                if (pdfFile) {
+                    updateStatus('正在从PDF提取文本...', 'info'); // Changed text
+                    inputText = await extractTextFromPdf(pdfFile);
+                    updateStatus('PDF文本提取完成。', 'info'); // Changed text
+                } else if (manualText) {
+                    inputText = manualText;
+                } else {
+                    throw new Error('请输入文本或上传PDF文件。'); // Changed text
+                }
+
+                if (!inputText) {
+                     throw new Error('无法提取文本或未提供文本。'); // Changed text
+                }
+
+                // Basic Sentence Splitting
+                sentences = inputText.match(/[^。？！；\n\r]+[。？！；\n\r]?\s*/g) || []; // Added semicolon
+                sentences = sentences.map(s => s.trim()).filter(s => s.length > 0);
+
+                if (sentences.length === 0) {
+                    throw new Error('在输入中未找到句子。'); // Changed text
+                }
+
+                updateStatus(`找到 ${sentences.length} 个句子。正在从DeepSeek获取解释...`, 'info'); // Changed text
+
+                generatedCardData = []; // Reset card data
+                const apiPromises = sentences.map(sentence => callDeepSeekApi(sentence));
+
+                // Process results sequentially or in batches to avoid rate limits if necessary
+                const results = [];
+                 for (const promise of apiPromises) {
+                     try {
+                         const result = await promise;
+                         results.push(result);
+                         // Optional: Add a small delay between API calls if needed
+                         // await new Promise(resolve => setTimeout(resolve, 200)); // 200ms delay
+                     } catch (error) {
+                         // Log individual promise errors if needed, though callDeepSeekApi handles internal errors
+                         console.error("Error processing a sentence:", error);
+                         results.push({ error: "Failed to process sentence." }); // Push an error object
+                     }
+                 }
+
+
+                updateStatus('正在处理API结果...', 'info'); // Changed text
+                let successCount = 0;
+                results.forEach((result, index) => {
+                    if (result && !result.error) {
+                         // Store data needed for card generation and Anki export
+                        const cardInfo = {
+                            originalSentence: sentences[index],
+                            // Map new fields from JSON structure
+                            sentencePinyin: result.sentence_pinyin || '',
+                            simpleExplanation: result.simple_explanation_mandarin || '',
+                            words: result.word_breakdown_mandarin || [], // Array of {word, pinyin, explanation_mandarin}
+                            examples: result.example_sentences_mandarin || [], // Array of {example, explanation_mandarin}
+                            grammar: result.grammar_point_mandarin || null // Object or null
+                        };
+                        generatedCardData.push(cardInfo);
+                        renderPreviewCard(cardInfo);
+                        successCount++;
+                    } else {
+                        updateStatus(`处理句子失败: ${sentences[index]} - ${result?.error || '未知API错误'}`, 'warning'); // Changed text
+                    }
+                });
+
+                if (successCount > 0) {
+                    previewSection.classList.remove('hidden');
+                    addToAnkiButton.classList.remove('hidden');
+                    updateStatus(`成功处理 ${successCount} 个句子。请预览下面的卡片。`, 'success'); // Changed text
+                } else {
+                     throw new Error('未能成功处理任何句子。'); // Changed text
+                }
+
+            } catch (error) {
+                console.error('处理错误:', error); // Changed text
+                updateStatus(`错误: ${error.message}`, 'error'); // Changed text
+                clearResults(); // Clear partial results on error
+            } finally {
+                setLoading(false);
+                pdfInput.value = ''; // Clear file input
+            }
+        }
+
+        async function extractTextFromPdf(file) {
+            const reader = new FileReader();
+
+            return new Promise((resolve, reject) => {
+                reader.onload = async (event) => {
+                    try {
+                        const typedArray = new Uint8Array(event.target.result);
+                        const pdf = await pdfjsLib.getDocument({ data: typedArray }).promise;
+                        let fullText = '';
+
+                        for (let i = 1; i <= pdf.numPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const textContent = await page.getTextContent();
+                            const pageText = textContent.items.map(item => item.str).join(' ');
+                            fullText += pageText + '\n\n'; // Use double newline as paragraph separator
+                        }
+                        resolve(fullText.trim());
+                    } catch (error) {
+                        reject(new Error(`解析PDF失败: ${error.message}`)); // Changed text
+                    }
+                };
+                reader.onerror = (error) => reject(new Error(`文件读取错误: ${error.message}`)); // Changed text
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // 2. DeepSeek API Integration
+        async function callDeepSeekApi(sentence) {
+            // --- USE THE REVISED MANDARIN-ONLY PROMPT ---
+            const prompt = `
+请分析以下中文句子，为中级（HSK 4-6水平）汉语学习者提供解释。
+句子："${sentence}"
+
+请以JSON格式返回以下信息，所有解释和说明都必须完全使用【简体中文】，并使用适合HSK 4-6学习者的词汇和句式：
+
+1.  "sentence_pinyin": 整个句子的【拼音】。
+2.  "simple_explanation_mandarin": 对整个句子意思的【简单中文解释】(像“简单解释”部分)。应该非常清晰易懂。
+3.  "word_breakdown_mandarin": 一个包含句子中【关键或较难词语】解释的数组。每个对象应包含：
+    *   "word": 词语本身 (例如 "从而")。
+    *   "pinyin": 该词语的拼音。
+    *   "explanation_mandarin": 对该词语在句中意思的【简单中文解释】 (例如 "因此，表示结果或接着发生的事情，比较书面化。")。请侧重HSK 4-6级别的词汇。
+4.  "example_sentences_mandarin": (可选，但推荐) 一个包含 2-3 个【中文例句】的数组。每个对象应包含：
+    *   "example": 使用原句中的关键词或结构的【例句】。
+    *   "explanation_mandarin": 对该例句意思的【简单中文解释】 (例如 "因为他不努力学习，所以结果考试失败了。")。
+5.  "grammar_point_mandarin": (如果句子中有明显的语法点) 一个包含【语法提示】的对象。应包含：
+    *   "point_name": 语法点的名称或关键词 (例如 "'从而' 的用法")。
+    *   "explanation_mandarin": 对该语法点的【简单中文解释】。
+    *   "pattern_mandarin": (可选) 该语法点常见的【句式结构】 (例如 "A (原因/过程), 从而 B (结果)")。如果无特别语法点，此字段可以为 null 或省略。
+
+请确保只返回JSON对象本身，不要在JSON前后添加任何其他文字或markdown标记 (\` \`\`json ... \`\` \` \`)。
+
+JSON结构示例:
+{{
+  "sentence_pinyin": "cóng ér zào chéng le bā líng hòu zǐ nǚ de pàn nì",
+  "simple_explanation_mandarin": "所以导致了1980年代出生的孩子不听话、很叛逆。",
+  "word_breakdown_mandarin": [
+    {{ "word": "从而", "pinyin": "cóng ér", "explanation_mandarin": "因此，表示结果或接着发生的事情，比较书面化。" }},
+    {{ "word": "造成", "pinyin": "zào chéng", "explanation_mandarin": "引起了，带来了（通常是不好的）结果。" }},
+    {{ "word": "80后", "pinyin": "bā líng hòu", "explanation_mandarin": "指1980年到1989年出生的人。" }},
+    {{ "word": "子女", "pinyin": "zǐ nǚ", "explanation_mandarin": "儿子和女儿，就是孩子的意思。" }},
+    {{ "word": "叛逆", "pinyin": "pàn nì", "explanation_mandarin": "不听长辈的话，有自己的想法，有时会反抗。" }}
+  ],
+  "example_sentences_mandarin": [
+    {{ "example": "父母管得太严，从而使孩子产生了叛逆心理。", "explanation_mandarin": "因为父母管得太严格，所以结果让孩子心里想要反抗。" }},
+    {{ "example": "我们要多沟通，从而避免不必要的误会。", "explanation_mandarin": "我们需要多交流，这样就能防止发生没必要的误会。" }}
+  ],
+  "grammar_point_mandarin": {{
+    "point_name": "'从而' 的用法",
+    "explanation_mandarin": "用在两个动作或情况之间，表示前面的情况导致了后面的结果。多用于书面语。",
+    "pattern_mandarin": "原因/方式 + 从而 + 结果"
+  }}
+}}
+
+请严格按照此JSON格式和全中文内容要求进行回复。
+            `;
+
+            try {
+                const response = await fetch(DEEPSEEK_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: 'deepseek-chat', // Or the specific model you prefer
+                        messages: [
+                            { role: 'system', content: '你是一个专门为汉语学习者分析中文句子的AI助手。请仅以要求的JSON格式提供全中文的回答。' }, // System prompt in Chinese
+                            { role: 'user', content: prompt }
+                        ],
+                        temperature: 0.3, // Lower temperature for more predictable, focused output
+                        max_tokens: 1500 // Increased max_tokens slightly for detailed Mandarin explanations
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    console.error("DeepSeek API 错误响应:", errorBody); // Changed text
+                    throw new Error(`API 请求失败: ${response.status} ${response.statusText}`); // Changed text
+                }
+
+                const data = await response.json();
+                const content = data.choices?.[0]?.message?.content;
+
+                if (!content) {
+                    console.error("DeepSeek API - 未找到内容:", data); // Changed text
+                    throw new Error('API 返回了空或无效的结构。'); // Changed text
+                }
+
+                try {
+                    const cleanedContent = content.replace(/^```json\s*|```$/g, '').trim();
+                    const parsedJson = JSON.parse(cleanedContent);
+                    return parsedJson;
+                } catch (parseError) {
+                     console.error("DeepSeek API - JSON 解析错误:", parseError, "原始内容:", content); // Changed text
+                     throw new Error('API 响应内容不是有效的 JSON。'); // Changed text
+                }
+
+            } catch (error) {
+                console.error(`DeepSeek API 调用失败，句子 "${sentence}":`, error); // Changed text
+                return { error: error.message }; // Return error object for handling
+            }
+        }
+
+        // 5. Preview Generation - Updated for Mandarin content
+        function renderPreviewCard(cardInfo) {
+            const cardClone = cardTemplate.content.cloneNode(true);
+            const cardElement = cardClone.querySelector('.card');
+
+            cardElement.querySelector('.card-front').textContent = cardInfo.originalSentence;
+            cardElement.querySelector('.card-pinyin').textContent = cardInfo.sentencePinyin || ''; // Display sentence pinyin
+
+            // Simple Explanation
+            const simpleExplanationSection = cardElement.querySelector('.simple-explanation');
+            if (cardInfo.simpleExplanation) {
+                simpleExplanationSection.querySelector('p').textContent = cardInfo.simpleExplanation;
+                simpleExplanationSection.classList.remove('hidden');
+            }
+
+            // Word Breakdown
+            const wordList = cardElement.querySelector('.word-breakdown ul');
+            wordList.innerHTML = ''; // Clear previous
+            if (cardInfo.words && cardInfo.words.length > 0) {
+                cardInfo.words.forEach(w => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <span class="word">${w.word || '?'}</span>
+                        <span class="pinyin">[${w.pinyin || ''}]</span>
+                        <span class="definition">${w.explanation_mandarin || '无解释'}</span>
+                    `; // Use explanation_mandarin
+                    wordList.appendChild(li);
+                });
+            } else {
+                cardElement.querySelector('.word-breakdown').innerHTML += '<p>词语解释不可用。</p>'; // Changed text
+            }
+
+            // Examples
+            const examplesSection = cardElement.querySelector('.examples');
+            const examplesList = examplesSection.querySelector('ul');
+            examplesList.innerHTML = ''; // Clear previous
+            if (cardInfo.examples && cardInfo.examples.length > 0) {
+                 cardInfo.examples.forEach(ex => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <div class="example-sentence">${ex.example || ''}</div>
+                        <div class="example-explanation">→ ${ex.explanation_mandarin || ''}</div>
+                    `;
+                    examplesList.appendChild(li);
+                 });
+                 examplesSection.classList.remove('hidden');
+             }
+
+            // Grammar
+            const grammarSection = cardElement.querySelector('.grammar');
+            grammarSection.innerHTML = '<h3>语法提示</h3>'; // Reset content but keep heading
+             if (cardInfo.grammar && cardInfo.grammar.explanation_mandarin) { // Check if grammar info exists
+                 let grammarHTML = `<p><b>${cardInfo.grammar.point_name || '语法点'}</b>: ${cardInfo.grammar.explanation_mandarin}</p>`;
+                if (cardInfo.grammar.pattern_mandarin) {
+                    grammarHTML += `<p class="pattern"><i>句式:</i> ${cardInfo.grammar.pattern_mandarin}</p>`;
+                }
+                 grammarSection.innerHTML += grammarHTML;
+                 grammarSection.classList.remove('hidden');
+             } else {
+                 grammarSection.classList.add('hidden'); // Hide if no grammar info
+             }
+
+            cardContainer.appendChild(cardElement);
+        }
+
+        function clearResults() {
+            sentences = [];
+            generatedCardData = [];
+            cardContainer.innerHTML = '';
+            previewSection.classList.add('hidden');
+            addToAnkiButton.classList.add('hidden');
+            addToAnkiButton.disabled = true; // Ensure button is disabled when cleared
+            statusBar.textContent = '';
+            statusBar.className = '';
+        }
+
+        // 6. Anki Deck Assembly (via AnkiConnect) - Updated for Mandarin content
+        async function handleAddToAnki() {
+            if (generatedCardData.length === 0) {
+                updateStatus('没有卡片可以添加。', 'warning'); // Changed text
+                return;
+            }
+
+            setLoading(true);
+            updateStatus(`正在添加 ${generatedCardData.length} 张卡片到Anki牌组 "${ANKI_DECK_NAME}"...`, 'info'); // Changed text
+
+            try {
+                // Check AnkiConnect connection
+                await callAnkiConnect('deckNames');
+
+                const notesToAdd = generatedCardData.map(cardInfo => {
+                    const front = cardInfo.originalSentence;
+                    let back = ''; // Build the back content
+
+                    // Add Pinyin
+                     if (cardInfo.sentencePinyin) {
+                         back += `<div style="text-align:center; color:grey; margin-bottom:10px;">${cardInfo.sentencePinyin}</div>`;
+                     }
+
+                    // Add Simple Explanation
+                    if (cardInfo.simpleExplanation) {
+                         back += `<b>简单解释:</b><p style="margin-top: 3px;">${cardInfo.simpleExplanation}</p><hr>`;
+                    }
+
+                    // Add Word Breakdown
+                    if (cardInfo.words && cardInfo.words.length > 0) {
+                        back += `<b>词语解释:</b><ul style="margin-top: 5px; padding-left: 0; list-style: none;">`;
+                        cardInfo.words.forEach(w => {
+                            back += `<li style="margin-bottom: 5px;"><b>${w.word}</b> <span style='color:grey;'>[${w.pinyin || ''}]</span>: ${w.explanation_mandarin || ''}</li>`;
+                        });
+                        back += `</ul><hr>`;
+                    }
+
+                    // Add Examples
+                    if (cardInfo.examples && cardInfo.examples.length > 0) {
+                        back += `<b>例句:</b><ul style="margin-top: 5px; padding-left: 0; list-style: none;">`;
+                        cardInfo.examples.forEach(ex => {
+                            back += `<li style="margin-bottom: 5px;">${ex.example || ''}<br><span style='font-size:0.9em; color: #555;'>→ ${ex.explanation_mandarin || ''}</span></li>`;
+                        });
+                        back += `</ul><hr>`;
+                    }
+
+                    // Add Grammar
+                    if (cardInfo.grammar && cardInfo.grammar.explanation_mandarin) {
+                        back += `<b>语法提示:</b>`;
+                        back += `<p style="margin-top: 3px; margin-bottom: 3px;"><b>${cardInfo.grammar.point_name || '语法点'}:</b> ${cardInfo.grammar.explanation_mandarin}</p>`;
+                        if (cardInfo.grammar.pattern_mandarin) {
+                            back += `<p style="margin-top: 3px; margin-bottom: 3px; font-style: italic; color: #666;">句式: ${cardInfo.grammar.pattern_mandarin}</p>`;
+                        }
+                         // Removed trailing <hr> for the last section
+                    }
+
+                    // Remove last <hr> if it exists
+                    if (back.endsWith('<hr>')) {
+                         back = back.slice(0, -4);
+                    }
+
+
+                    return {
+                        deckName: ANKI_DECK_NAME,
+                        modelName: ANKI_MODEL_NAME, // Ensure this model exists in your Anki
+                        fields: {
+                            // Adjust field names EXACTLY as they appear in your Anki model
+                            "Front": front,
+                            "Back": back
+                        },
+                        tags: ["mandarin", "auto-generated", "中文解释"] // Added new tag
+                    };
+                });
+
+                // Use 'addNotes' action for multiple notes
+                const response = await callAnkiConnect('addNotes', { notes: notesToAdd });
+
+                if (response.error) {
+                    throw new Error(`AnkiConnect 错误: ${response.error}`); // Changed text
+                }
+
+                const addedCount = response.result.filter(id => id !== null).length;
+                const failedCount = response.result.length - addedCount;
+
+                let statusMessage = `成功添加 ${addedCount} 张卡片到Anki牌组 "${ANKI_DECK_NAME}"。`; // Changed text
+                let statusType = 'success';
+                if (failedCount > 0) {
+                    statusMessage += ` ${failedCount} 张卡片添加失败（请检查Anki模型/字段和AnkiConnect控制台）。`; // Changed text
+                    statusType = 'warning'; // Show as warning if some failed
+                }
+                 updateStatus(statusMessage, statusType);
+
+
+            } catch (error) {
+                console.error('AnkiConnect 错误:', error); // Changed text
+                updateStatus(`添加卡片失败: ${error.message}。 Anki是否已打开并安装/允许了AnkiConnect？`, 'error'); // Changed text
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function callAnkiConnect(action, params = {}) {
+            try {
+                const response = await fetch(ANKI_CONNECT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ action: action, version: 6, params: params })
+                });
+
+                 if (!response.ok) {
+                    let errorText = `HTTP 错误 ${response.status}`;
+                    try {
+                        const errorBody = await response.json();
+                        if(errorBody && errorBody.error) errorText += `: ${errorBody.error}`;
+                        else errorText += ` - ${response.statusText}`;
+                    } catch (e) { errorText += ` - ${response.statusText}`; }
+                    throw new Error(errorText);
+                }
+
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                return data;
+            } catch (networkError) {
+                console.error("调用AnkiConnect的网络错误:", networkError); // Changed text
+                throw new Error(`无法连接到 AnkiConnect (${ANKI_CONNECT_URL})。请确认Anki正在运行并且AnkiConnect插件已安装并启用。`); // Changed text
+            }
+        }
+
+        // Initial check if AnkiConnect seems available (optional)
+        document.addEventListener('DOMContentLoaded', () => {
+            callAnkiConnect('deckNames')
+                .then(() => console.log("AnkiConnect 连接测试成功。")) // Changed text
+                .catch(err => {
+                    console.warn("初始 AnkiConnect 检查失败:", err.message); // Changed text
+                    updateStatus("警告：启动时无法连接到AnkiConnect。请确保Anki正在运行。", 'warning'); // Changed text
+                 });
+        });
+
+    </script>
+</body>
+</html>
